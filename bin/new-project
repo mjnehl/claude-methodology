@@ -131,12 +131,18 @@ git commit --quiet -m "Initial project setup with methodology scaffolding
 
 Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>"
 
-# Create GitHub repo and push
-if command -v gh &> /dev/null; then
+# Create GitHub repo and push (skip in CI or if gh is not available/authenticated)
+if [ -z "${CI:-}" ] && command -v gh &> /dev/null && gh auth status &> /dev/null; then
   echo "Creating GitHub repo..."
   gh repo create "$PROJECT_NAME" --private --source . --push
 else
-  echo "Warning: gh CLI not found, skipping GitHub repo creation"
+  if [ -n "${CI:-}" ]; then
+    echo "Skipping GitHub repo creation (CI environment)"
+  elif ! command -v gh &> /dev/null; then
+    echo "Skipping GitHub repo creation (gh CLI not found)"
+  else
+    echo "Skipping GitHub repo creation (gh not authenticated)"
+  fi
 fi
 
 echo ""
