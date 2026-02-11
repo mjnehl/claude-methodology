@@ -53,7 +53,8 @@ VERIFICATION: [PASS/FAIL]
 Build:    [OK/FAIL]
 Types:    [OK/X errors]
 Lint:     [OK/X issues]
-Tests:    [X/Y passed, Z% coverage]
+Tests:    [X/Y passed]
+Coverage: [X% branches (threshold: 80%)/SKIPPED] (full/pre-pr only)
 E2E:      [OK/X failures/SKIPPED] (full/pre-pr only)
 Secrets:  [OK/X found]
 Logs:     [OK/X console.logs]
@@ -67,6 +68,8 @@ If any critical issues, list them with fix suggestions.
 
 $ARGUMENTS can be:
 - `quick` - Only build + types (fastest, use during active development)
-- `full` - All checks including E2E (default)
-- `pre-commit` - Build + types + lint + unit tests (no E2E)
-- `pre-pr` - All checks including E2E + security scan (most thorough)
+- `pre-commit` - Build + types + lint + unit tests (no coverage, no E2E)
+- `full` - All checks including **coverage enforcement** (80% threshold) + E2E (default)
+- `pre-pr` - All checks including **coverage enforcement** (80% threshold) + E2E + security scan (most thorough)
+
+Coverage is enforced at `full` and `pre-pr` tiers. See `.claude/docs/TESTING.md` § "Coverage Guidelines" for thresholds.

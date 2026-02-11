@@ -70,11 +70,13 @@ npm test
 - Optimize performance
 - Enhance readability
 
-### Step 6: Verify Coverage
+### Step 6: Verify Coverage (Step-Completion Gate)
 ```bash
-npm run test:coverage
-# Verify 80%+ coverage
+npm test -- --coverage --coverageReporters=text-summary
+# Verify 80%+ coverage; if dropped >1% from previous step, fix before proceeding
 ```
+
+When modifying an existing file, check its coverage first. If below 80%, improve its most critical untested branches in the same step. See `.claude/docs/TESTING.md` § "Step-Completion Coverage Gate" and "Branch Coverage Checklist".
 
 ## Test Types (per TESTING.md)
 

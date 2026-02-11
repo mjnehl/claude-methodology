@@ -30,8 +30,9 @@ The planner will:
 2. Break down into phases with specific steps
 3. Identify dependencies between components
 4. **Identify critical user journeys** that need E2E tests
-5. Assess risks and potential blockers
-6. Present the plan and WAIT for confirmation
+5. **Check coverage baseline** and flag files below 80% that will be modified
+6. Assess risks and potential blockers
+7. Present the plan and WAIT for confirmation
 
 ## Output Format
 
@@ -55,6 +56,11 @@ The planner will:
 - [Journey 1: e.g., "User creates task, marks complete, verifies persistence"]
 - [Journey 2: ...]
 - Stories requiring E2E: [list which stories touch these journeys]
+
+## Coverage Baseline
+- Current branch coverage: [X%]
+- Existing files being modified that are below 80%: [list with current %]
+- Coverage check included at: [end of each implementation phase / step]
 
 ## Dependencies
 - [External dependencies]

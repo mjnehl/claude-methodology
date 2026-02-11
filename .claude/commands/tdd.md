@@ -28,6 +28,8 @@ REFACTOR: Improve code, keep tests passing
 REPEAT:   Next feature/scenario
 ```
 
+**Step-completion gate:** After completing each implementation step, check coverage. Address gaps before proceeding. See `.claude/docs/TESTING.md` § "Step-Completion Coverage Gate".
+
 ## When to Use
 
 Use `/tdd` when:

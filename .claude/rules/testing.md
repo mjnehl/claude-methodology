@@ -16,6 +16,8 @@ Aligns with coverage requirements from `.claude/docs/TESTING.md`:
 
 MANDATORY for new features: RED → GREEN → REFACTOR. Use the **tdd-guide** agent, which enforces the full workflow. See `.claude/docs/TESTING.md` § "TDD Is the Default" for principles.
 
+**Continuous coverage:** Check coverage after each implementation step, not just at the end. When modifying existing files below 80% coverage, improve their coverage in the same step. See `.claude/docs/TESTING.md` § "Step-Completion Coverage Gate".
+
 ## Troubleshooting Test Failures
 
 1. Use **tdd-guide** agent

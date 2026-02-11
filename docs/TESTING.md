@@ -157,6 +157,26 @@ If yes → Write tests first. TDD is the default workflow.
 4. Refactor if needed
 ```
 
+#### Step-Completion Coverage Gate
+
+TDD validates behavior but not coverage. Branch coverage gaps accumulate silently across implementation steps — a 2-branch gap per step becomes a 374-branch gap after 9 steps.
+
+**After completing each implementation step in a multi-step plan:**
+
+```bash
+npm test -- --coverage --coverageReporters=text-summary
+```
+
+If any threshold is failing or has dropped by more than 1% from the previous step, address it before proceeding. Small gaps (2-5 branches) are trivial to fix in context; large gaps at the end require costly remediation rounds.
+
+**When modifying an existing file**, check its coverage first:
+
+```bash
+npm test -- --coverage --collectCoverageFrom='src/path/to/file.ts' --coverageReporters=text
+```
+
+If the file is below 80% branches, write tests for the most critical untested branches as part of your current step — enough to establish a positive trend. Don't add branches to a file without improving its coverage floor.
+
 **Why TDD by default:**
 - Forces clear thinking about requirements before coding
 - Tests exist as specification, not afterthought
@@ -429,6 +449,21 @@ Each CI run gets an isolated environment. See `ENVIRONMENTS.md` for GitHub Actio
 | Utilities | 90%+ |
 | API handlers | 70%+ |
 | Generated code | 0% (generator is tested) |
+
+### Branch Coverage Checklist
+
+TDD naturally covers happy paths and key error cases but consistently misses secondary branches. When writing tests, check for these patterns in your code:
+
+| Pattern | What TDD covers | What it misses |
+|---------|----------------|----------------|
+| `catch (e) { e instanceof Error ? e : new Error(String(e)) }` | Throwing an Error | Throwing a string/number/object |
+| `value ?? defaultValue` | When value is present | When value is null/undefined |
+| `if (array.length === 0) return` | Non-empty array | Empty array early return |
+| `input.field !== undefined` in update functions | Setting the field | Not setting the field (skip branch) |
+| `result.success ? result.data : fallback` | Success case | Failure case |
+| `typeof x === 'function' && x()` | When x is a function | When x is not a function |
+
+Use this checklist during the step-completion coverage gate (see "Step-Completion Coverage Gate" above). If coverage is below threshold, these patterns are the most likely gaps.
 
 ### Coverage Anti-Patterns
 
