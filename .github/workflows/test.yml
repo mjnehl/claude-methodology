@@ -1,0 +1,29 @@
+name: Test Bootstrap
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  test-bootstrap:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run bootstrap test
+        run: bin/test-bootstrap
+
+      - name: Verify example is up to date
+        run: |
+          # Generate fresh example
+          bin/test-bootstrap --keep-example
+
+          # Check if there are differences
+          if [ -n "$(git status --porcelain examples/)" ]; then
+            echo "::error::examples/sample-project is out of date. Run 'bin/test-bootstrap --keep-example' and commit."
+            git diff examples/
+            exit 1
+          fi

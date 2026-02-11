@@ -1,0 +1,268 @@
+#!/bin/bash
+# assess-baseline - Assess a project against methodology standards
+#
+# Usage: assess-baseline [project-directory]
+#
+# Checks a project for methodology compliance and generates a report.
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+PROJECT_DIR="${1:-.}"
+
+# Convert to absolute path
+PROJECT_DIR="$(cd "$PROJECT_DIR" && pwd)"
+PROJECT_NAME="$(basename "$PROJECT_DIR")"
+
+echo "========================================"
+echo "Methodology Baseline Assessment"
+echo "========================================"
+echo "Project: $PROJECT_NAME"
+echo "Path: $PROJECT_DIR"
+echo "Date: $(date '+%Y-%m-%d')"
+echo ""
+
+score=0
+total=0
+warnings=()
+missing=()
+
+# Helper functions
+check_file() {
+  local file="$1"
+  local description="$2"
+  local required="$3"
+
+  total=$((total + 1))
+  if [ -f "$PROJECT_DIR/$file" ]; then
+    echo "✅ $description"
+    score=$((score + 1))
+  else
+    if [ "$required" = "required" ]; then
+      echo "❌ $description (MISSING)"
+      missing+=("$file")
+    else
+      echo "⚠️  $description (recommended)"
+      warnings+=("$file")
+    fi
+  fi
+}
+
+check_dir() {
+  local dir="$1"
+  local description="$2"
+
+  total=$((total + 1))
+  if [ -d "$PROJECT_DIR/$dir" ]; then
+    echo "✅ $description"
+    score=$((score + 1))
+  else
+    echo "❌ $description (MISSING)"
+    missing+=("$dir/")
+  fi
+}
+
+check_command() {
+  local cmd="$1"
+  local description="$2"
+  local dir="$3"
+
+  total=$((total + 1))
+  if (cd "$PROJECT_DIR" && eval "$cmd" > /dev/null 2>&1); then
+    echo "✅ $description"
+    score=$((score + 1))
+  else
+    echo "⚠️  $description (not available)"
+    warnings+=("$description")
+  fi
+}
+
+# Section: Structure
+echo "📁 Project Structure"
+echo "--------------------"
+check_file "CLAUDE.md" "CLAUDE.md (AI entry point)" "required"
+check_dir ".claude/docs" "Methodology docs (.claude/docs/)"
+check_dir "docs" "Documentation directory"
+check_file "FRICTION.md" "FRICTION.md (friction tracking)" "recommended"
+
+echo ""
+
+# Section: Methodology Docs
+echo "📚 Methodology Documents"
+echo "------------------------"
+if [ -d "$PROJECT_DIR/.claude/docs" ]; then
+  check_file ".claude/docs/APPROACH.md" "APPROACH.md" "required"
+  check_file ".claude/docs/CONTRIBUTING.md" "CONTRIBUTING.md" "required"
+  check_file ".claude/docs/TESTING.md" "TESTING.md" "required"
+  check_file ".claude/docs/ENVIRONMENTS.md" "ENVIRONMENTS.md" "recommended"
+else
+  echo "⚠️  Methodology docs directory missing - skipping doc checks"
+  total=$((total + 4))
+  missing+=(".claude/docs/APPROACH.md" ".claude/docs/CONTRIBUTING.md" ".claude/docs/TESTING.md")
+  warnings+=(".claude/docs/ENVIRONMENTS.md")
+fi
+
+echo ""
+
+# Section: Architecture
+echo "🏗️  Architecture"
+echo "----------------"
+check_file "docs/ARCHITECTURE.md" "Architecture documentation" "recommended"
+if [ -d "$PROJECT_DIR/docs/decisions" ]; then
+  adr_count=$(ls -1 "$PROJECT_DIR/docs/decisions/"*.md 2>/dev/null | wc -l | tr -d ' ')
+  if [ "$adr_count" -gt 0 ]; then
+    echo "✅ ADRs present ($adr_count found)"
+    score=$((score + 1))
+    total=$((total + 1))
+  else
+    echo "⚠️  No ADRs found in docs/decisions/"
+    total=$((total + 1))
+    warnings+=("ADRs")
+  fi
+else
+  echo "⚠️  ADR directory missing (docs/decisions/)"
+  total=$((total + 1))
+  warnings+=("docs/decisions/")
+fi
+
+echo ""
+
+# Section: Testing
+echo "🧪 Testing"
+echo "----------"
+if [ -f "$PROJECT_DIR/package.json" ]; then
+  if grep -q '"test"' "$PROJECT_DIR/package.json"; then
+    echo "✅ Test script configured"
+    score=$((score + 1))
+  else
+    echo "⚠️  No test script in package.json"
+    warnings+=("test script")
+  fi
+  total=$((total + 1))
+
+  # Check for test files
+  test_files=$(find "$PROJECT_DIR" -name "*.test.*" -o -name "*.spec.*" 2>/dev/null | head -5 | wc -l | tr -d ' ')
+  if [ "$test_files" -gt 0 ]; then
+    echo "✅ Test files present"
+    score=$((score + 1))
+  else
+    echo "⚠️  No test files found (*.test.* or *.spec.*)"
+    warnings+=("test files")
+  fi
+  total=$((total + 1))
+elif [ -f "$PROJECT_DIR/pyproject.toml" ] || [ -f "$PROJECT_DIR/setup.py" ]; then
+  if [ -d "$PROJECT_DIR/tests" ]; then
+    echo "✅ Tests directory present"
+    score=$((score + 1))
+  else
+    echo "⚠️  No tests directory"
+    warnings+=("tests/")
+  fi
+  total=$((total + 1))
+else
+  echo "⚠️  Could not detect test setup"
+  total=$((total + 1))
+fi
+
+echo ""
+
+# Section: Git
+echo "📝 Version Control"
+echo "------------------"
+if [ -d "$PROJECT_DIR/.git" ]; then
+  echo "✅ Git initialized"
+  score=$((score + 1))
+  total=$((total + 1))
+
+  # Check .gitignore
+  check_file ".gitignore" ".gitignore present" "recommended"
+
+  # Check for sensitive files
+  if git -C "$PROJECT_DIR" ls-files | grep -qE '\.(env|key|pem|secret)$'; then
+    echo "⚠️  Potentially sensitive files in git"
+    warnings+=("sensitive files in git")
+  else
+    echo "✅ No obvious sensitive files committed"
+    score=$((score + 1))
+  fi
+  total=$((total + 1))
+else
+  echo "❌ Not a git repository"
+  total=$((total + 1))
+  missing+=(".git")
+fi
+
+echo ""
+
+# Section: Claude Code Components
+echo "⚙️  Claude Code Components"
+echo "--------------------------"
+check_dir ".claude/agents" "Agents directory"
+check_dir ".claude/commands" "Commands directory"
+
+claude_dir="$PROJECT_DIR/.claude"
+if [ -d "$claude_dir" ]; then
+  [ -d "$claude_dir/agents" ] && agent_count=$(ls -1 "$claude_dir/agents/"*.md 2>/dev/null | wc -l | tr -d ' ') || agent_count=0
+  [ -d "$claude_dir/commands" ] && cmd_count=$(ls -1 "$claude_dir/commands/"*.md 2>/dev/null | wc -l | tr -d ' ') || cmd_count=0
+  [ -d "$claude_dir/rules" ] && rule_count=$(ls -1 "$claude_dir/rules/"*.md 2>/dev/null | wc -l | tr -d ' ') || rule_count=0
+  [ -d "$claude_dir/skills" ] && skill_count=$(ls -1d "$claude_dir/skills/"*/ 2>/dev/null | wc -l | tr -d ' ') || skill_count=0
+
+  echo "   Agents: $agent_count | Commands: $cmd_count | Rules: $rule_count | Skills: $skill_count"
+fi
+
+echo ""
+
+# Summary
+echo "========================================"
+echo "Summary"
+echo "========================================"
+
+percentage=$((score * 100 / total))
+
+if [ $percentage -ge 80 ]; then
+  grade="A"
+elif [ $percentage -ge 60 ]; then
+  grade="B"
+elif [ $percentage -ge 40 ]; then
+  grade="C"
+else
+  grade="D"
+fi
+
+echo "Score: $score/$total ($percentage%)"
+echo "Grade: $grade"
+echo ""
+
+if [ ${#missing[@]} -gt 0 ]; then
+  echo "Missing (required):"
+  for item in "${missing[@]}"; do
+    echo "  - $item"
+  done
+  echo ""
+fi
+
+if [ ${#warnings[@]} -gt 0 ]; then
+  echo "Recommended improvements:"
+  for item in "${warnings[@]}"; do
+    echo "  - $item"
+  done
+  echo ""
+fi
+
+# Recommendations
+echo "Next Steps:"
+if [ ! -d "$PROJECT_DIR/.claude/docs" ]; then
+  echo "  1. Run: refresh-methodology (after setting up .claude/docs/)"
+fi
+if [ ! -f "$PROJECT_DIR/FRICTION.md" ]; then
+  echo "  - Create FRICTION.md for library tracking"
+fi
+if [ ${#missing[@]} -gt 0 ]; then
+  echo "  - Address missing required items"
+fi
+if [ "$percentage" -lt 80 ]; then
+  echo "  - Address recommended items to reach 80%+ compliance"
+fi
+
+echo ""
+echo "For methodology docs: $SCRIPT_DIR/docs/"

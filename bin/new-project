@@ -1,0 +1,150 @@
+#!/bin/bash
+# new-project - Create a new project with methodology scaffolding
+#
+# Usage: new-project <project-name> [base-directory]
+#
+# Examples:
+#   new-project my-app                    # Creates ~/projects/my-app
+#   new-project my-app ~/work             # Creates ~/work/my-app
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+METHODOLOGY_DOCS="$SCRIPT_DIR/docs"
+TEMPLATES="$SCRIPT_DIR/templates"
+CLAUDE_DIR="$SCRIPT_DIR/.claude"
+
+# Check arguments
+if [ -z "$1" ]; then
+  echo "Usage: new-project <project-name> [base-directory]"
+  echo ""
+  echo "Examples:"
+  echo "  new-project my-app                    # Creates ~/projects/my-app"
+  echo "  new-project my-app ~/work             # Creates ~/work/my-app"
+  exit 1
+fi
+
+PROJECT_NAME="$1"
+BASE_DIR="${2:-$HOME/projects}"
+PROJECT_DIR="$BASE_DIR/$PROJECT_NAME"
+
+# Check if project already exists
+if [ -d "$PROJECT_DIR" ]; then
+  echo "Error: $PROJECT_DIR already exists"
+  exit 1
+fi
+
+# Create project structure
+echo "Creating project: $PROJECT_DIR"
+mkdir -p "$PROJECT_DIR"/{.claude/docs,docs/decisions}
+
+# Copy methodology docs
+echo "Copying methodology docs..."
+cp "$METHODOLOGY_DOCS"/*.md "$PROJECT_DIR/.claude/docs/"
+cp -r "$METHODOLOGY_DOCS/patterns" "$PROJECT_DIR/.claude/docs/"
+
+# Copy Claude Code components to correct locations
+echo "Copying skills..."
+if [ -d "$CLAUDE_DIR/skills" ]; then
+  cp -r "$CLAUDE_DIR/skills" "$PROJECT_DIR/.claude/"
+fi
+
+echo "Copying agents..."
+if [ -d "$CLAUDE_DIR/agents" ]; then
+  cp -r "$CLAUDE_DIR/agents" "$PROJECT_DIR/.claude/"
+fi
+
+echo "Copying commands..."
+if [ -d "$CLAUDE_DIR/commands" ]; then
+  cp -r "$CLAUDE_DIR/commands" "$PROJECT_DIR/.claude/"
+fi
+
+echo "Copying rules..."
+if [ -d "$CLAUDE_DIR/rules" ]; then
+  cp -r "$CLAUDE_DIR/rules" "$PROJECT_DIR/.claude/"
+fi
+
+echo "Copying hooks..."
+if [ -d "$CLAUDE_DIR/hooks" ]; then
+  cp -r "$CLAUDE_DIR/hooks" "$PROJECT_DIR/.claude/"
+fi
+
+# Copy workstream scripts
+echo "Copying scripts..."
+if [ -d "$TEMPLATES/scripts" ]; then
+  mkdir -p "$PROJECT_DIR/scripts"
+  cp "$TEMPLATES/scripts"/*.sh "$PROJECT_DIR/scripts/"
+  chmod +x "$PROJECT_DIR/scripts"/*.sh
+fi
+
+# Copy templates
+echo "Copying templates..."
+cp "$TEMPLATES/project-claude.md" "$PROJECT_DIR/CLAUDE.md"
+cp "$TEMPLATES/project-settings.json" "$PROJECT_DIR/.claude/settings.json"
+cp "$TEMPLATES/FRICTION.md" "$PROJECT_DIR/FRICTION.md"
+cp "$TEMPLATES/ROADMAP.md" "$PROJECT_DIR/docs/ROADMAP.md"
+
+# Initialize git
+echo "Initializing git..."
+cd "$PROJECT_DIR"
+git init --quiet
+
+# Configure git user if not set (for CI environments)
+if [ -z "$(git config user.email)" ]; then
+  git config user.email "ci@example.com"
+  git config user.name "CI"
+fi
+
+# Create .gitignore
+cat > .gitignore << 'EOF'
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+
+# Environment
+.env
+.env.local
+.env.*.local
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Claude local settings (user-specific)
+.claude/settings.local.json
+EOF
+
+# Initial commit
+git add -A
+git commit --quiet -m "Initial project setup with methodology scaffolding
+
+Co-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>"
+
+# Create GitHub repo and push
+if command -v gh &> /dev/null; then
+  echo "Creating GitHub repo..."
+  gh repo create "$PROJECT_NAME" --private --source . --push
+else
+  echo "Warning: gh CLI not found, skipping GitHub repo creation"
+fi
+
+echo ""
+echo "Project created successfully!"
+echo ""
+echo "Next steps:"
+echo "  cd $PROJECT_DIR"
+echo "  claude"
+echo ""
+echo "Available commands: /verify, /tdd, /code-review, /build-fix, /workstream"
+echo "Available agents: architect, code-reviewer, tdd-guide, security-reviewer"

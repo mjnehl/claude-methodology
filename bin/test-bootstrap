@@ -1,0 +1,213 @@
+#!/bin/bash
+# test-bootstrap - Verify that new-project creates correct structure
+#
+# Usage: test-bootstrap [--keep-example]
+#
+# Options:
+#   --keep-example    After testing, copy result to examples/sample-project
+#
+# Exit codes:
+#   0 - All tests passed
+#   1 - Test failed
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+REPO_DIR="$(cd "$SCRIPT_DIR/.." && pwd)"
+TEMP_DIR=$(mktemp -d)
+TEST_PROJECT="test-project-$$"
+KEEP_EXAMPLE=false
+
+# Parse arguments
+for arg in "$@"; do
+  case $arg in
+    --keep-example)
+      KEEP_EXAMPLE=true
+      ;;
+  esac
+done
+
+# Cleanup function
+cleanup() {
+  if [ -d "$TEMP_DIR" ]; then
+    rm -rf "$TEMP_DIR"
+  fi
+}
+
+# Always cleanup on exit (unless keeping example)
+if [ "$KEEP_EXAMPLE" = false ]; then
+  trap cleanup EXIT
+fi
+
+# Colors for output
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+NC='\033[0m' # No Color
+
+pass() {
+  echo -e "${GREEN}✓${NC} $1"
+}
+
+fail() {
+  echo -e "${RED}✗${NC} $1"
+  exit 1
+}
+
+echo "Testing bootstrap process..."
+echo ""
+
+# Run new-project
+echo "Creating test project in $TEMP_DIR..."
+"$SCRIPT_DIR/new-project" "$TEST_PROJECT" "$TEMP_DIR" > /dev/null 2>&1
+
+PROJECT_DIR="$TEMP_DIR/$TEST_PROJECT"
+
+# Verify project directory exists
+[ -d "$PROJECT_DIR" ] || fail "Project directory not created"
+pass "Project directory created"
+
+# Verify .claude/docs structure
+[ -d "$PROJECT_DIR/.claude/docs" ] || fail ".claude/docs not created"
+pass ".claude/docs directory created"
+
+# Verify methodology docs are copied
+EXPECTED_DOCS=(
+  "APPROACH.md"
+  "CONTRIBUTING.md"
+  "ENVIRONMENTS.md"
+  "TESTING.md"
+  "CI_CD.md"
+  "BOOTSTRAP.md"
+  "ADR_TEMPLATE.md"
+  "LIBRARY.md"
+  "METHODOLOGY_HEALTH.md"
+  "README.md"
+)
+
+for doc in "${EXPECTED_DOCS[@]}"; do
+  [ -f "$PROJECT_DIR/.claude/docs/$doc" ] || fail "Missing: .claude/docs/$doc"
+done
+pass "All methodology docs copied"
+
+# Verify patterns directory
+[ -d "$PROJECT_DIR/.claude/docs/patterns" ] || fail "patterns/ directory not copied"
+[ -f "$PROJECT_DIR/.claude/docs/patterns/DSL_GENERATION.md" ] || fail "Missing: patterns/DSL_GENERATION.md"
+pass "Patterns directory copied"
+
+# Verify Claude Code components (new structure)
+# Verify agents
+[ -d "$PROJECT_DIR/.claude/agents" ] || fail ".claude/agents not created"
+EXPECTED_AGENTS=("architect.md" "code-reviewer.md" "security-reviewer.md" "tdd-guide.md" "build-error-resolver.md" "e2e-runner.md" "product-analyst.md")
+for agent in "${EXPECTED_AGENTS[@]}"; do
+  [ -f "$PROJECT_DIR/.claude/agents/$agent" ] || fail "Missing: .claude/agents/$agent"
+done
+pass "All agents copied (${#EXPECTED_AGENTS[@]})"
+
+# Verify commands
+[ -d "$PROJECT_DIR/.claude/commands" ] || fail ".claude/commands not created"
+EXPECTED_COMMANDS=("verify.md" "code-review.md" "tdd.md" "build-fix.md" "report-friction.md")
+for cmd in "${EXPECTED_COMMANDS[@]}"; do
+  [ -f "$PROJECT_DIR/.claude/commands/$cmd" ] || fail "Missing: .claude/commands/$cmd"
+done
+pass "Key commands copied"
+
+# Verify skills
+[ -d "$PROJECT_DIR/.claude/skills" ] || fail ".claude/skills not created"
+[ -d "$PROJECT_DIR/.claude/skills/verification-loop" ] || fail "Missing: .claude/skills/verification-loop"
+pass "Skills directory copied"
+
+# Verify rules
+[ -d "$PROJECT_DIR/.claude/rules" ] || fail ".claude/rules not created"
+EXPECTED_RULES=("testing.md" "security.md" "coding-style.md")
+for rule in "${EXPECTED_RULES[@]}"; do
+  [ -f "$PROJECT_DIR/.claude/rules/$rule" ] || fail "Missing: .claude/rules/$rule"
+done
+pass "Key rules copied"
+
+# Verify FRICTION.md
+[ -f "$PROJECT_DIR/FRICTION.md" ] || fail "FRICTION.md not created"
+pass "FRICTION.md created"
+
+# Verify project structure
+[ -d "$PROJECT_DIR/docs/decisions" ] || fail "docs/decisions not created"
+pass "docs/decisions directory created"
+
+# Verify CLAUDE.md
+[ -f "$PROJECT_DIR/CLAUDE.md" ] || fail "CLAUDE.md not created"
+pass "CLAUDE.md created"
+
+# Verify .gitignore
+[ -f "$PROJECT_DIR/.gitignore" ] || fail ".gitignore not created"
+pass ".gitignore created"
+
+# Verify git initialized
+[ -d "$PROJECT_DIR/.git" ] || fail "Git not initialized"
+pass "Git repository initialized"
+
+# Verify initial commit exists
+cd "$PROJECT_DIR"
+COMMIT_COUNT=$(git rev-list --count HEAD 2>/dev/null || echo "0")
+[ "$COMMIT_COUNT" -ge 1 ] || fail "No initial commit"
+pass "Initial commit created"
+
+# Verify .claude/settings.json
+[ -f "$PROJECT_DIR/.claude/settings.json" ] || fail ".claude/settings.json not created"
+pass ".claude/settings.json created"
+
+echo ""
+echo -e "${GREEN}All tests passed!${NC}"
+
+# Keep example if requested
+if [ "$KEEP_EXAMPLE" = true ]; then
+  echo ""
+  echo "Updating examples/sample-project..."
+
+  EXAMPLE_DIR="$REPO_DIR/examples/sample-project"
+
+  # Remove old example if exists
+  rm -rf "$EXAMPLE_DIR"
+
+  # Copy new example (without .git to avoid submodule issues)
+  mkdir -p "$REPO_DIR/examples"
+  cp -r "$PROJECT_DIR" "$EXAMPLE_DIR"
+  rm -rf "$EXAMPLE_DIR/.git"
+
+  # Add a note about this being generated
+  cat > "$EXAMPLE_DIR/README.md" << 'EOF'
+# Sample Project
+
+This is an example of a project bootstrapped with the Claude Methodology.
+
+**This directory is auto-generated.** Do not edit directly. To regenerate:
+
+```bash
+bin/test-bootstrap --keep-example
+```
+
+## What's Included
+
+- `CLAUDE.md` - Entry point for AI sessions (customize this)
+- `.claude/docs/` - Methodology documentation
+- `.claude/agents/` - Specialized agents
+- `.claude/commands/` - Slash commands
+- `.claude/skills/` - Workflow definitions
+- `.claude/rules/` - Always-follow guidelines
+- `docs/decisions/` - Where ADRs go
+- `FRICTION.md` - Library friction tracking
+- `.gitignore` - Standard ignores
+
+## Next Steps
+
+After bootstrapping a real project:
+
+1. Customize `CLAUDE.md` with your project details
+2. Create `docs/ARCHITECTURE.md`
+3. Create your first ADR: `docs/decisions/001-initial-tech-stack.md`
+4. Set up your environment (`docker-compose.yml`, etc.)
+EOF
+
+  pass "Example updated at examples/sample-project"
+
+  # Cleanup temp dir manually since we disabled trap
+  rm -rf "$TEMP_DIR"
+fi

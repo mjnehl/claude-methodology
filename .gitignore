@@ -1,0 +1,16 @@
+# Agent prompts (not checked in)
+prompts/
+
+# Ideas (local drafts, not checked in)
+ideas/
+docs/ideas/
+
+# Projects (local only)
+projects/
+
+# Personal roadmaps (local only)
+ROADMAP.md
+METHODOLOGY_ROADMAP.md
+
+# OS files
+.DS_Store

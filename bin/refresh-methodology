@@ -1,0 +1,145 @@
+#!/bin/bash
+# refresh-methodology - Update methodology docs in all projects
+#
+# Usage: refresh-methodology
+#
+# Scans project directories and updates .claude/ from the central
+# methodology repo.
+#
+# Environment:
+#   CLAUDE_PROJECT_DIRS  Colon-separated list of directories to scan
+#                        (default: ~/projects)
+#
+# Examples:
+#   refresh-methodology
+#   CLAUDE_PROJECT_DIRS="$HOME/projects:$HOME/work" refresh-methodology
+
+set -e
+
+SCRIPT_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+METHODOLOGY_DOCS="$SCRIPT_DIR/docs"
+CLAUDE_DIR="$SCRIPT_DIR/.claude"
+
+# Parse colon-separated dirs, default to ~/projects
+IFS=':' read -ra PROJECT_DIRS <<< "${CLAUDE_PROJECT_DIRS:-$HOME/projects}"
+
+if [ ! -d "$METHODOLOGY_DOCS" ]; then
+  echo "Error: Methodology docs not found at $METHODOLOGY_DOCS"
+  exit 1
+fi
+
+echo "Refreshing methodology from $SCRIPT_DIR"
+echo ""
+
+updated=0
+warnings=0
+
+# Check if a file has local modifications by comparing to methodology source
+check_local_changes() {
+  local docs_dir="$1"
+  local has_changes=false
+
+  for src_file in "$METHODOLOGY_DOCS"/*.md; do
+    local filename=$(basename "$src_file")
+    local dest_file="$docs_dir/$filename"
+
+    if [ -f "$dest_file" ] && ! diff -q "$src_file" "$dest_file" > /dev/null 2>&1; then
+      if [ "$has_changes" = false ]; then
+        echo "  Warning: Local modifications detected (will be overwritten):"
+        has_changes=true
+      fi
+      echo "    - $filename"
+    fi
+  done
+
+  [ "$has_changes" = true ]
+}
+
+for base_dir in "${PROJECT_DIRS[@]}"; do
+  if [ ! -d "$base_dir" ]; then
+    continue
+  fi
+
+  for project in "$base_dir"/*/; do
+    claude_dir="$project.claude"
+    docs_dir="$claude_dir/docs"
+
+    if [ -d "$docs_dir" ]; then
+      if check_local_changes "$docs_dir"; then
+        ((warnings++)) || true
+      fi
+
+      # Update methodology docs
+      cp "$METHODOLOGY_DOCS"/*.md "$docs_dir/"
+      cp -r "$METHODOLOGY_DOCS/patterns" "$docs_dir/"
+
+      # Update Claude Code components
+      # Skills: replace entirely (subdirectory structure, unlikely to have project additions)
+      if [ -d "$CLAUDE_DIR/skills" ]; then
+        rm -rf "$claude_dir/skills"
+        cp -r "$CLAUDE_DIR/skills" "$claude_dir/"
+      fi
+
+      # Agents: additive copy (preserves project-specific agents)
+      if [ -d "$CLAUDE_DIR/agents" ]; then
+        mkdir -p "$claude_dir/agents"
+        cp "$CLAUDE_DIR/agents"/*.md "$claude_dir/agents/" 2>/dev/null || true
+      fi
+
+      # Commands: additive copy (preserves project-specific commands like /deploy)
+      if [ -d "$CLAUDE_DIR/commands" ]; then
+        mkdir -p "$claude_dir/commands"
+        cp "$CLAUDE_DIR/commands"/*.md "$claude_dir/commands/" 2>/dev/null || true
+      fi
+
+      # Rules: additive copy (preserves project-specific rules)
+      if [ -d "$CLAUDE_DIR/rules" ]; then
+        mkdir -p "$claude_dir/rules"
+        cp "$CLAUDE_DIR/rules"/*.md "$claude_dir/rules/" 2>/dev/null || true
+      fi
+
+      # Hooks: copy utility files, but preserve diverged hooks.json
+      if [ -d "$CLAUDE_DIR/hooks" ]; then
+        mkdir -p "$claude_dir/hooks"
+        # Copy utility files (always safe to overwrite)
+        for f in "$CLAUDE_DIR/hooks"/*.js "$CLAUDE_DIR/hooks"/*.md; do
+          [ -f "$f" ] && cp "$f" "$claude_dir/hooks/"
+        done
+        # Only overwrite hooks.json if it hasn't diverged
+        if [ -f "$claude_dir/hooks/hooks.json" ]; then
+          if ! diff -q "$CLAUDE_DIR/hooks/hooks.json" "$claude_dir/hooks/hooks.json" > /dev/null 2>&1; then
+            echo "  Warning: hooks.json has local changes (not overwritten)"
+            ((warnings++)) || true
+          else
+            cp "$CLAUDE_DIR/hooks/hooks.json" "$claude_dir/hooks/hooks.json"
+          fi
+        else
+          cp "$CLAUDE_DIR/hooks/hooks.json" "$claude_dir/hooks/hooks.json"
+        fi
+      fi
+
+      # Clean up old operational directory if it exists
+      if [ -d "$project.claude/operational" ]; then
+        echo "  Removing deprecated .claude/operational/"
+        rm -rf "$project.claude/operational"
+      fi
+
+      echo "Updated: $project"
+      ((updated++)) || true
+    fi
+  done
+done
+
+echo ""
+if [ $updated -eq 0 ]; then
+  echo "No projects found with .claude/docs/ directory."
+  echo "Searched in: ${PROJECT_DIRS[*]}"
+else
+  echo "Done. Updated $updated project(s)."
+  if [ $warnings -gt 0 ]; then
+    echo ""
+    echo "Note: $warnings project(s) had local modifications that were overwritten."
+    echo "Methodology docs in .claude/docs/ are managed centrally."
+    echo "For project-specific guidance, use CLAUDE.md or docs/decisions/."
+  fi
+fi
