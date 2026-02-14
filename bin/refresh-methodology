@@ -98,24 +98,31 @@ for base_dir in "${PROJECT_DIRS[@]}"; do
         cp "$CLAUDE_DIR/rules"/*.md "$claude_dir/rules/" 2>/dev/null || true
       fi
 
-      # Hooks: copy utility files, but preserve diverged hooks.json
+      # Hooks: copy utility scripts and merge hooks config into settings.json
       if [ -d "$CLAUDE_DIR/hooks" ]; then
         mkdir -p "$claude_dir/hooks"
-        # Copy utility files (always safe to overwrite)
+        # Copy utility scripts (always safe to overwrite)
         for f in "$CLAUDE_DIR/hooks"/*.js "$CLAUDE_DIR/hooks"/*.md; do
           [ -f "$f" ] && cp "$f" "$claude_dir/hooks/"
         done
-        # Only overwrite hooks.json if it hasn't diverged
+        # Remove stale hooks.json from projects (hooks now live in settings.json)
         if [ -f "$claude_dir/hooks/hooks.json" ]; then
-          if ! diff -q "$CLAUDE_DIR/hooks/hooks.json" "$claude_dir/hooks/hooks.json" > /dev/null 2>&1; then
-            echo "  Warning: hooks.json has local changes (not overwritten)"
-            ((warnings++)) || true
-          else
-            cp "$CLAUDE_DIR/hooks/hooks.json" "$claude_dir/hooks/hooks.json"
-          fi
-        else
-          cp "$CLAUDE_DIR/hooks/hooks.json" "$claude_dir/hooks/hooks.json"
+          rm "$claude_dir/hooks/hooks.json"
+          echo "  Migrated: removed .claude/hooks/hooks.json (hooks now in settings.json)"
         fi
+      fi
+
+      # Merge hooks config into project's settings.json
+      if [ -f "$CLAUDE_DIR/hooks/hooks.json" ] && [ -f "$claude_dir/settings.json" ]; then
+        node -e "
+          const fs = require('fs');
+          const hooksFile = process.argv[1];
+          const settingsFile = process.argv[2];
+          const hooksData = JSON.parse(fs.readFileSync(hooksFile, 'utf8'));
+          const settings = JSON.parse(fs.readFileSync(settingsFile, 'utf8'));
+          settings.hooks = hooksData.hooks;
+          fs.writeFileSync(settingsFile, JSON.stringify(settings, null, 2) + '\n');
+        " "$CLAUDE_DIR/hooks/hooks.json" "$claude_dir/settings.json"
       fi
 
       # Clean up old operational directory if it exists

@@ -1,31 +1,30 @@
 # Hooks
 
-Automation hooks that trigger on specific events.
+Automation hooks that trigger on specific events during Claude Code sessions.
 
-## Available Hooks
+## How Hooks Work
 
-See `hooks.json` for full configuration.
+Hooks are configured in each project's `.claude/settings.json` under the `hooks` key. The canonical hook definitions live in `hooks.json` in this directory and are merged into project settings by `bin/refresh-methodology`.
 
-### Recommended Hooks
+**Important:** `.claude/hooks/hooks.json` is the source definition only. Claude Code reads hooks from `.claude/settings.json`, not from this directory.
 
-| Hook | Trigger | Purpose |
-|------|---------|---------|
-| Auto-format | PostToolUse (Edit/Write) | Format code after changes |
-| Type-check | PostToolUse (Edit/Write) | Check types after changes |
-| Console.log warning | PostToolUse | Warn about debug statements |
-| Large file warning | PostToolUse (Edit/Write) | Warn when source files exceed 500 lines |
+## Utility Scripts
 
-### Optional Hooks
+| Script | Purpose |
+|--------|---------|
+| `warn-large-files.js` | Warn once per session when a source file exceeds 500 lines |
 
-| Hook | Trigger | Purpose |
-|------|---------|---------|
-| tmux reminder | PreToolUse (Bash) | Remind to use tmux for long commands |
-| git push review | PreToolUse (Bash) | Remind to review before pushing |
+Utility scripts are copied to projects by `refresh-methodology` and referenced by hook commands.
 
-## Configuration
+## Active Hooks
 
-Hooks are configured in `hooks.json` and can be customized per project.
-
-## Methodology References
-
-- Hooks automate verification from `docs/CONTRIBUTING.md`
+| Hook | Event | Purpose |
+|------|-------|---------|
+| Dev server blocker | PreToolUse | Block dev servers outside tmux |
+| tmux reminder | PreToolUse | Remind to use tmux for long commands |
+| git push review | PreToolUse | Remind to verify before pushing |
+| Doc file blocker | PreToolUse | Block random .md file creation |
+| PR URL logger | PostToolUse | Log PR URL after creation |
+| console.log warning | PostToolUse | Warn about debug statements |
+| Large file warning | PostToolUse | Warn when files exceed 500 lines |
+| Stop check | Stop | Check for console.log before session ends |
