@@ -150,9 +150,39 @@ COMMIT_COUNT=$(git rev-list --count HEAD 2>/dev/null || echo "0")
 [ "$COMMIT_COUNT" -ge 1 ] || fail "No initial commit"
 pass "Initial commit created"
 
-# Verify .claude/settings.json
+# Verify .claude/settings.json exists and is valid JSON
 [ -f "$PROJECT_DIR/.claude/settings.json" ] || fail ".claude/settings.json not created"
-pass ".claude/settings.json created"
+node -e "JSON.parse(require('fs').readFileSync('$PROJECT_DIR/.claude/settings.json','utf8'))" 2>/dev/null || fail ".claude/settings.json is not valid JSON"
+pass ".claude/settings.json created and valid JSON"
+
+# Verify settings.json has required keys (functional validation)
+node -e "
+  const s = JSON.parse(require('fs').readFileSync('$PROJECT_DIR/.claude/settings.json','utf8'));
+  if (!s.permissions) { console.error('missing permissions'); process.exit(1); }
+  if (!s.permissions.allow || !Array.isArray(s.permissions.allow)) { console.error('missing permissions.allow'); process.exit(1); }
+  if (!s.hooks) { console.error('missing hooks'); process.exit(1); }
+  if (!s.hooks.PreToolUse) { console.error('missing hooks.PreToolUse'); process.exit(1); }
+  if (!s.hooks.PostToolUse) { console.error('missing hooks.PostToolUse'); process.exit(1); }
+  if (!s.hooks.Stop) { console.error('missing hooks.Stop'); process.exit(1); }
+" 2>/dev/null || fail ".claude/settings.json missing required keys (permissions, hooks)"
+pass ".claude/settings.json has permissions and hooks"
+
+# Verify permissions use glob patterns (not exact matches that cause bloat)
+node -e "
+  const s = JSON.parse(require('fs').readFileSync('$PROJECT_DIR/.claude/settings.json','utf8'));
+  const gitPerms = s.permissions.allow.filter(p => /^Bash\(git (add|commit|push|diff|log)/.test(p));
+  const hasGlobs = gitPerms.every(p => /\*/.test(p));
+  if (!hasGlobs) { console.error('git permissions should use globs: ' + gitPerms.filter(p => !/\*/.test(p)).join(', ')); process.exit(1); }
+" 2>/dev/null || fail ".claude/settings.json has exact-match git permissions (should use globs)"
+pass ".claude/settings.json permissions use glob patterns"
+
+# Verify hooks utility scripts are present (not just config)
+[ -f "$PROJECT_DIR/.claude/hooks/warn-large-files.js" ] || fail "Missing hooks utility: warn-large-files.js"
+pass "Hook utility scripts present"
+
+# Verify stale hooks.json was NOT copied to project
+[ ! -f "$PROJECT_DIR/.claude/hooks/hooks.json" ] || fail "Stale hooks.json found in .claude/hooks/ (hooks belong in settings.json)"
+pass "No stale hooks.json in .claude/hooks/"
 
 echo ""
 echo -e "${GREEN}All tests passed!${NC}"
